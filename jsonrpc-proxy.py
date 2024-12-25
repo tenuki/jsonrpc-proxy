@@ -40,9 +40,8 @@ class Client:
 
     @staticmethod
     def object_or_list_to_call(data):
-        obj_to_call = lambda element: RPCc(
+        obj_to_call = lambda element: RPCc(method=element['method'], params=element['params'], id=element['id'])
         return [obj_to_call(element) for element in data] if isinstance(data, list) else obj_to_call(data)
-            call_rpc = [obj_to_call(element) for element in data]
 
     async def dispatch(self, data):
         r = await self.get(data)
