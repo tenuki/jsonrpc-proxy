@@ -11,24 +11,15 @@ from aiohttp import web
 PORT = int(os.environ.get("PORT", "3000"))
 RPCNODE = sys.argv[1] if len(sys.argv)>1 else "https://sepolia.base.org/"
 
-# @method
-# async def ping():
-#     return 'pong'
-# @method
-# async def web3_clientVersion():
-#     return Success({"done": '3.4'})
+RPCc = lambda method, id, params=[]: RPCd(jsonrpc="2.0", method=method, id=id, params=params)
+RPCr = lambda result, id: RPCd(jsonrpc="2.0", result=result, id=id)
+RPCerror = lambda err_code, err_msg, id: RPCd(jsonrpc="2.0", error={"code": err_code, "message": err_msg}, id=id)
+RPCe_NotExistingMethod = lambda id: RPCerror(err_code=-32601, err_msg="Method not found")
 
 
 class RPCd(dict):
     def json(self):
         return json.dumps(self)
-
-
-RPCc = lambda method, id, params=[]: RPCd({"jsonrpc": "2.0", "method": method, "params": params, "id": id})
-RPCr = lambda result, id: RPCd({"jsonrpc": "2.0", "result": result, "id": id})
-RPCerror = lambda err_code, err_msg, id: RPCd(
-    {"jsonrpc": "2.0", "error": {"code": err_code, "message": err_msg}, "id": id})
-RPCe_NotExistingMethod = lambda id: RPCerror(err_code=-32601, err_msg="Method not found")
 
 
 class Client:
@@ -43,12 +34,18 @@ class Client:
             self._client = aiohttp.ClientSession()
         return self._client
 
-    async def get(self, method, *params, **data):
-        rpc = RPCc(method, data['id'], params)
+    async def get(self, data):
+        rpc = self.object_or_list_to_call(data)
         return await self.client.post(self.base_url, json=rpc, ssl=self.ssl)
 
+    @staticmethod
+    def object_or_list_to_call(data):
+        obj_to_call = lambda element: RPCc(
+        return [obj_to_call(element) for element in data] if isinstance(data, list) else obj_to_call(data)
+            call_rpc = [obj_to_call(element) for element in data]
+
     async def dispatch(self, data):
-        r = await self.get(data['method'], *data['params'], id=data['id'])
+        r = await self.get(data)
         ret = await (r.text() if r.headers['Content-Type'] == 'text/plain' else r.json())
         return ret
 
@@ -62,9 +59,7 @@ def handle():
         print("<-", orig)
         oret = await client.dispatch(orig)
         print("->", oret)
-        return web.Response(text=RPCr(oret['result'], oret['id']).json(),
-                            content_type="application/json")
-
+        return web.Response(text=json.dumps(oret), content_type="application/json")
     return _handle
 
 
